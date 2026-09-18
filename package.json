@@ -1,0 +1,17 @@
+{
+  "name": "sergak-bot",
+  "version": "1.0.0",
+  "description": "Telegram Business Sergak Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "@grammyjs/runner": "^2.0.3",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.4.2",
+    "grammy": "^1.46.0"
+  }
+}
