@@ -267,260 +267,89 @@ bot.on('business_message', async (ctx) => {
 
 // Xabar tahrirlanganda (Edit)
 bot.on('edited_business_message', async (ctx) => {
+  // ==========================================
+// 1. Tahrirlangan xabarlarni ushlash (Media va Matn, Username / Xavfsizlik bilan)
+// ==========================================
+bot.on('edited_business_message', async (ctx) => {
   const msg = ctx.editedBusinessMessage;
-  console.log(`[EVENT: edited_business_message] msg_id=${msg.message_id}, conn_id=${msg.business_connection_id}`);
-  
-  // Akkaunt egasini aniqlash (baza yoki API)
-  const ownerId = await getOwnerId(msg.business_connection_id);
-  if (!ownerId) {
-    console.log("[OGOHLANTIRISH] Akkaunt egasi topilmadi:", msg.business_connection_id);
-    return;
-  }
+  if (!msg) return;
 
-  // AGAR XABARNI AKKAUNT EGASI (SIZ) O'ZINGIZ TAHRIRLAGAN BO'LSANGIZ, BILDIRISHNOMA KERAK EMAS
+  const ownerId = await getOwnerId(msg.business_connection_id);
+  if (!ownerId) return;
+
   if (msg.from && msg.from.id === ownerId) {
-    console.log("[FILTR] Akkaunt egasi o'zi edit qildi, e'tiborga olinmadi.");
-    return;
+    return; // O'zi edit qilgan bo'lsa e'tiborga olinmaydi
   }
 
   const stmtSelect = db.prepare('SELECT text FROM messages WHERE message_id = ? AND chat_id = ?');
   const oldMsg = stmtSelect.get(msg.message_id, msg.chat.id);
   const newText = msg.text || msg.caption || "[Media fayl / Stiker]";
   const senderName = msg.from ? msg.from.first_name : "Suhbatdoshingiz";
+  const senderUsername = msg.from ? msg.from.username : null;
 
   if (oldMsg && oldMsg.text !== newText) {
-    const report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
-    
-    // Username bo'lsa usernamega, bo'lmasa ID ga havola qiladi
-    const profileUrl = msg.from.username 
-      ? `https://t.me/${msg.from.username}` 
-      : `tg://user?id=${msg.from.id}`;
-    const profileUrl = msg.from.username ? `https://t.me/${msg.from.username}` : `tg://user?id=${msg.from.id}`;
-const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
+    let report = `<b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
+
+    let keyboard;
+    if (senderUsername) {
+      const profileUrl = `https://t.me/${senderUsername}`;
+      keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
+    } else {
+      report += `\n\n🔒 <i>Xavfsizlik uchun bu odamni ko'rsata olmaymiz, ammo uning nicknamesi: ${escapeHtml(senderName)}</i>`;
+      keyboard = undefined;
+    }
 
     try {
-      await bot.api.sendMessage(ownerId, report, { 
+      await bot.api.sendMessage(ownerId, report, {
         parse_mode: 'HTML',
-        reply_markup: keyboard
+        reply_markup: keyboard,
       });
-      console.log(`[BILDIRISHNOMA] Edit xabari egasiga (${ownerId}) yetkazildi!`);
     } catch (err) {
       console.log("[XATO] Edit xabarini yuborishda:", err.message);
     }
-    // Bazadagi matnni yangilaymiz
+
     db.prepare('UPDATE messages SET text = ? WHERE message_id = ? AND chat_id = ?').run(newText, msg.message_id, msg.chat.id);
   }
 });
 
-// Xabar o'chirilganda (Delete)
+// ==========================================
+// 2. O'chirilgan xabarlarni ushlash (Media va Matn, Username / Xavfsizlik bilan)
+// ==========================================
 bot.on('deleted_business_messages', async (ctx) => {
   const deletion = ctx.deletedBusinessMessages;
-  console.log(`[EVENT: deleted_business_messages] count=${deletion.message_ids.length}, conn_id=${deletion.business_connection_id}`);
-  
-  // Akkaunt egasini aniqlash (baza yoki API)
+  if (!deletion) return;
+
   const ownerId = await getOwnerId(deletion.business_connection_id);
-  if (!ownerId) {
-    console.log("[OGOHLANTIRISH] Akkaunt egasi topilmadi:", deletion.business_connection_id);
-    return;
-  }
+  if (!ownerId) return;
 
   for (const msgId of deletion.message_ids) {
-    const stmtSelect = db.prepare('SELECT sender_id, sender_name, text FROM messages WHERE message_id = ? AND chat_id = ?');
+    const stmtSelect = db.prepare('SELECT sender_id, sender_name, sender_username, text FROM messages WHERE message_id = ? AND chat_id = ?');
     const deletedMsg = stmtSelect.get(msgId, deletion.chat.id);
 
     if (deletedMsg) {
-      // AGAR XABARNI O'ZINGIZ YOZIB O'CHIRGAN BO'LSANGIZ, BILDIRISHNOMA BORMAYDI
       if (deletedMsg.sender_id === ownerId) {
-        console.log("[FILTR] Akkaunt egasi o'z xabarini o'chirdi, e'tiborga olinmadi.");
-        continue;
+        continue; // O'zi o'chirgan bo'lsa tashlab yuboramiz
       }
 
-      const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
-      
-      const profileUrl = deletedMsg.sender_username ? `https://t.me/${deletedMsg.sender_username}` : `tg://user?id=${deletedMsg.sender_id}`;
-const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
+      let report = `<b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n🗑 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text || "[Media fayl / Stiker]")}</b>`;
+
+      let keyboard;
+      if (deletedMsg.sender_username) {
+        const profileUrl = `https://t.me/${deletedMsg.sender_username}`;
+        keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
+      } else {
+        report += `\n\n🔒 <i>Xavfsizlik uchun bu odamni ko'rsata olmaymiz, ammo uning nicknamesi: ${escapeHtml(deletedMsg.sender_name)}</i>`;
+        keyboard = undefined;
+      }
 
       try {
-        await bot.api.sendMessage(ownerId, report, { 
+        await bot.api.sendMessage(ownerId, report, {
           parse_mode: 'HTML',
-          reply_markup: keyboard
+          reply_markup: keyboard,
         });
-        console.log(`[BILDIRISHNOMA] Delete xabari egasiga (${ownerId}) yetkazildi!`);
       } catch (err) {
         console.log("[XATO] Delete xabarini yuborishda:", err.message);
       }
-      
-      // Xabarni bazadan tozalaymiz
-      db.prepare('DELETE FROM messages WHERE message_id = ? AND chat_id = ?').run(msgId, deletion.chat.id);
     }
   }
-});
-
-bot.catch((err) => {
-  console.log("[XATO ushlandi]:", err.message);
-});
-
-bot.start({
-  drop_pending_updates: false,
-  onStart: (botInfo) => {
-    console.log(`🛡 Sergak Bot (@${botInfo.username}) to'liq BEPUL rejimda ishga tushdi!`);
-  }
-});
-
-// ==========================================
-// ADMIN: Statistika, Sahifalash, Excel va Rassilka (Xatosiz versiya)
-// ==========================================
-
-const ADMIN_ID = 7967211137; // <-- O'z ID raqamingizni yozing
-
-// 1. Bot statistikasi (/stats)
-bot.command('stats', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
-  }
-
-  try {
-    const userCountRow = db.prepare('SELECT COUNT(DISTINCT sender_id) as count FROM messages').get();
-    const totalUsers = userCountRow ? userCountRow.count : 0;
-
-    const statsText = `
-📊 <b>Bot Statistikasi:</b>
-
-👥 Jami foydalanuvchilar: <b>${totalUsers} ta</b>
-🛡 Holati: <b>Faol va barqaror ishlayapti</b>
-    `;
-    await ctx.reply(statsText, { parse_mode: 'HTML' });
-  } catch (err) {
-    await ctx.reply("Statistikani olishda xatolik yuz berdi: " + err.message);
-  }
-});
-
-// 2. Foydalanuvchilar ro'yxati 10 tadan sahifalanib (/followers)
-bot.command('followers', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
-  }
-
-  const page = 1;
-  const limit = 10;
-  const offset = (page - 1) * limit;
-
-  const users = db.prepare('SELECT sender_id, sender_name, sender_username FROM messages GROUP BY sender_id LIMIT ? OFFSET ?').all(limit, offset);
-  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT sender_id) as count FROM messages').get();
-  const totalUsers = totalCountRow ? totalCountRow.count : 0;
-  const totalPages = Math.ceil(totalUsers / limit) || 1;
-
-  if (users.length === 0) {
-    return ctx.reply("Hozircha bot foydalanuvchilari yo'q.");
-  }
-
-  let text = `👥 <b>Foydalanuvchilar ro'yxati (Sahifa ${page}/${totalPages}):</b>\n\n`;
-  users.forEach((u, index) => {
-    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.sender_id}`;
-    text += `${offset + index + 1}. ${u.sender_name || 'Noma\'lum'} (${usernameStr})\n`;
-  });
-
-  const keyboard = new InlineKeyboard();
-  if (totalPages > 1) {
-    keyboard.text("➡️ Keyingi", `page_${page + 1}`);
-  }
-
-  await ctx.reply(text, { parse_mode: 'HTML', reply_markup: keyboard });
-});
-
-// Sahifalash tugmalari uchun (Next / Prev)
-bot.callbackQuery(/^page_(\d+)$/, async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.answerCallbackQuery({ text: "Bu tugma faqat admin uchun!", show_alert: true });
-  }
-
-  const page = parseInt(ctx.match[1]);
-  const limit = 10;
-  const offset = (page - 1) * limit;
-
-  const users = db.prepare('SELECT sender_id, sender_name, sender_username FROM messages GROUP BY sender_id LIMIT ? OFFSET ?').all(limit, offset);
-  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT sender_id) as count FROM messages').get();
-  const totalUsers = totalCountRow ? totalCountRow.count : 0;
-  const totalPages = Math.ceil(totalUsers / limit) || 1;
-
-  if (users.length === 0) {
-    return ctx.answerCallbackQuery({ text: "Boshqa sahifa yo'q." });
-  }
-
-  let text = `👥 <b>Foydalanuvchilar ro'yxati (Sahifa ${page}/${totalPages}):</b>\n\n`;
-  users.forEach((u, index) => {
-    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.sender_id}`;
-    text += `${offset + index + 1}. ${u.sender_name || 'Noma\'lum'} (${usernameStr})\n`;
-  });
-
-  const keyboard = new InlineKeyboard();
-  if (page > 1) {
-    keyboard.text("⬅️ Oldingi", `page_${page - 1}`);
-  }
-  if (page < totalPages) {
-    keyboard.text("➡️ Keyingi", `page_${page + 1}`);
-  }
-
-  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
-  await ctx.answerCallbackQuery();
-});
-
-// 3. Excel (CSV) formatida yuklab olish (/export)
-bot.command('export', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
-  }
-
-  try {
-    const users = db.prepare('SELECT DISTINCT sender_id, sender_name, sender_username, created_at FROM messages').all();
-
-    if (users.length === 0) {
-      return ctx.reply("Eksport qilish uchun ma'lumotlar topilmadi.");
-    }
-
-    let csvContent = "Sender ID,Ism,Username,Sana\n";
-    users.forEach(u => {
-      const name = `"${(u.sender_name || '').replace(/"/g, '""')}"`;
-      const username = u.sender_username ? `"@${u.sender_username}"` : '"Yo\'q"';
-      csvContent += `${u.sender_id},${name},${username},"${u.created_at || ''}"\n`;
-    });
-
-    const buffer = Buffer.from(csvContent, 'utf-8');
-    await ctx.replyWithDocument(new InputFile(buffer, 'users_list.csv'), {
-      caption: "📊 Barcha foydalanuvchilar ro'yxati (Excel/CSV formatida)."
-    });
-  } catch (err) {
-    await ctx.reply("Eksport qilishda xatolik yuz berdi: " + err.message);
-  }
-});
-
-// 4. Rasmli, videoli yoki matnli reklama tarqatish (/send)
-bot.command('send', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
-  }
-
-  const repliedMsg = ctx.message.reply_to_message;
-  
-  if (!repliedMsg) {
-    return ctx.reply("⚠️ Rassilka qilish uchun biron bir xabarga (rasm, video yoki matn) <b>reply</b> qilib, ustiga <b>/send</b> deb yozing!", { parse_mode: 'HTML' });
-  }
-
-  const users = db.prepare('SELECT DISTINCT sender_id FROM messages').all();
-  
-  let successCount = 0;
-  let failCount = 0;
-
-  await ctx.reply(`⏳ Xabar ${users.length} ta foydalanuvchiga yuborilmoqda...`);
-
-  for (const user of users) {
-    try {
-      await ctx.api.copyMessage(user.sender_id, ctx.chat.id, repliedMsg.message_id);
-      successCount++;
-    } catch (err) {
-      failCount++;
-    }
-  }
-
-  await ctx.reply(`✅ Rassilka yakunlandi!\n\n🟢 Muvaffaqiyatli: ${successCount}\n🔴 Xato (bloklaganlar): ${failCount}`);
 });
