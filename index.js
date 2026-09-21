@@ -291,8 +291,11 @@ bot.on('edited_business_message', async (ctx) => {
   if (oldMsg && oldMsg.text !== newText) {
     const report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
     
-    // Foydalanuvchi profiliga o'tish uchun tugma
-    const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${msg.from.id}`);
+    // Username bo'lsa usernamega, bo'lmasa ID ga havola qiladi
+    const profileUrl = msg.from.username 
+      ? `https://t.me/${msg.from.username}` 
+      : `tg://user?id=${msg.from.id}`;
+    const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
 
     try {
       await bot.api.sendMessage(ownerId, report, { 
@@ -333,7 +336,6 @@ bot.on('deleted_business_messages', async (ctx) => {
 
       const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
       
-      // Foydalanuvchi profiliga o'tish uchun tugma (sender_id bazadan olinadi)
       const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${deletedMsg.sender_id}`);
 
       try {
