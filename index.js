@@ -366,7 +366,7 @@ bot.start({
 });
 
 // ==========================================
-// ADMIN BUYruqlari (Statistika va Rassilka)
+// ADMIN: Statistika, 10 talik Sahifalash, Excel va Rasmli/Videoli Rassilka
 // ==========================================
 
 // O'zingizning Telegram ID raqamingizni shu yerga yozing:
@@ -379,7 +379,7 @@ bot.command('stats', async (ctx) => {
   }
 
   try {
-    const userCountRow = db.prepare('SELECT COUNT(*) as count FROM users').get();
+    const userCountRow = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM messages').get();
     const totalUsers = userCountRow ? userCountRow.count : 0;
 
     const statsText = `
@@ -394,18 +394,120 @@ bot.command('stats', async (ctx) => {
   }
 });
 
-// 2. Hammaga xabar yuborish (/send)
+// 2. Foydalanuvchilar ro'yxati 10 tadan sahifalanib (/followers)
+bot.command('followers', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
+  }
+
+  const page = 1;
+  const limit = 10;
+  const offset = (page - 1) * limit;
+
+  const users = db.prepare('SELECT user_id, sender_name, sender_username FROM messages GROUP BY user_id LIMIT ? OFFSET ?').all(limit, offset);
+  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM messages').get();
+  const totalUsers = totalCountRow ? totalCountRow.count : 0;
+  const totalPages = Math.ceil(totalUsers / limit) || 1;
+
+  if (users.length === 0) {
+    return ctx.reply("Hozircha bot foydalanuvchilari yo'q.");
+  }
+
+  let text = `👥 <b>Foydalanuvchilar ro'yxati (Sahifa ${page}/${totalPages}):</b>\n\n`;
+  users.forEach((u, index) => {
+    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.user_id}`;
+    text += `${offset + index + 1}. ${u.sender_name || 'Noma\'lum'} (${usernameStr})\n`;
+  });
+
+  const keyboard = new InlineKeyboard();
+  if (totalPages > 1) {
+    keyboard.text("➡️ Keyingi", `page_${page + 1}`);
+  }
+
+  await ctx.reply(text, { parse_mode: 'HTML', reply_markup: keyboard });
+});
+
+// Sahifalash tugmalari uchun (Next / Prev)
+bot.callbackQuery(/^page_(\d+)$/, async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.answerCallbackQuery({ text: "Bu tugma faqat admin uchun!", show_alert: true });
+  }
+
+  const page = parseInt(ctx.match[1]);
+  const limit = 10;
+  const offset = (page - 1) * limit;
+
+  const users = db.prepare('SELECT user_id, sender_name, sender_username FROM messages GROUP BY user_id LIMIT ? OFFSET ?').all(limit, offset);
+  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM messages').get();
+  const totalUsers = totalCountRow ? totalCountRow.count : 0;
+  const totalPages = Math.ceil(totalUsers / limit) || 1;
+
+  if (users.length === 0) {
+    return ctx.answerCallbackQuery({ text: "Boshqa sahifa yo'q." });
+  }
+
+  let text = `👥 <b>Foydalanuvchilar ro'yxati (Sahifa ${page}/${totalPages}):</b>\n\n`;
+  users.forEach((u, index) => {
+    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.user_id}`;
+    text += `${offset + index + 1}. ${u.sender_name || 'Noma\'lum'} (${usernameStr})\n`;
+  });
+
+  const keyboard = new InlineKeyboard();
+  if (page > 1) {
+    keyboard.text("⬅️ Oldingi", `page_${page - 1}`);
+  }
+  if (page < totalPages) {
+    keyboard.text("➡️ Keyingi", `page_${page + 1}`);
+  }
+
+  await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
+  await ctx.answerCallbackQuery();
+});
+
+// 3. Excel (CSV) formatida yuklab olish (/export)
+bot.command('export', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
+  }
+
+  try {
+    const users = db.prepare('SELECT DISTINCT user_id, sender_name, sender_username, created_at FROM messages').all();
+
+    if (users.length === 0) {
+      return ctx.reply("Eksport qilish uchun ma'lumotlar topilmadi.");
+    }
+
+    let csvContent = "User ID,Ism,Username,Sana\n";
+    users.forEach(u => {
+      const name = `"${(u.sender_name || '').replace(/"/g, '""')}"`;
+      const username = u.sender_username ? `"@${u.sender_username}"` : '"Yo\'q"';
+      csvContent += `${u.user_id},${name},${username},"${u.created_at || ''}"\n`;
+    });
+
+    const buffer = Buffer.from(csvContent, 'utf-8');
+    await ctx.replyWithDocument(new InputFile(buffer, 'users_list.csv'), {
+      caption: "📊 Barcha foydalanuvchilar ro'yxati (Excel/CSV formatida)."
+    });
+  } catch (err) {
+    await ctx.reply("Eksport qilishda xatolik yuz berdi: " + err.message);
+  }
+});
+
+// 4. Rasmli, videoli yoki matnli reklama tarqatish (/send)
+// Qanday ishlatiladi: Rasm yoki videoga izoh (caption) yozib, ostiga /send deb yuborasiz
 bot.command('send', async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply("Bu buyruq faqat bot egasi uchun!");
   }
 
-  const messageText = ctx.match;
-  if (!messageText) {
-    return ctx.reply("Iltimos, xabar matnini ham yozing.\nMasalan: /send Salom hammaga!");
+  // Xabar rasm, video yoki oddiy matn ekanligini aniqlaymiz (reply qilingan xabar orqali)
+  const repliedMsg = ctx.message.reply_to_message;
+  
+  if (!repliedMsg) {
+    return ctx.reply("⚠️ Rassilka qilish uchun biron bir xabarga (rasm, video yoki matn) <b>reply</b> qilib, ustiga <b>/send</b> deb yozing!", { parse_mode: 'HTML' });
   }
 
-  const users = db.prepare('SELECT user_id FROM users').all();
+  const users = db.prepare('SELECT DISTINCT user_id FROM messages').all();
   
   let successCount = 0;
   let failCount = 0;
@@ -414,10 +516,11 @@ bot.command('send', async (ctx) => {
 
   for (const user of users) {
     try {
-      await bot.api.sendMessage(user.user_id, messageText, { parse_mode: 'HTML' });
+      // Reply qilingan xabarni foydalanuvchiga nusxalab yuboramiz (rasm, video, matn - farqi yo'q)
+      await ctx.api.copyMessage(user.user_id, ctx.chat.id, repliedMsg.message_id);
       successCount++;
     } catch (err) {
-      failCount++; // Botni bloklaganlar yoki o'chirib yuborganlar
+      failCount++; // Botni bloklaganlar
     }
   }
 
