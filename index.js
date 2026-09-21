@@ -41,6 +41,7 @@ db.exec(`
     chat_id INTEGER,
     sender_id INTEGER,
     sender_name TEXT,
+    sender_username TEXT,
     text TEXT,
     created_at TEXT,
     PRIMARY KEY (message_id, chat_id)
@@ -49,6 +50,7 @@ db.exec(`
 
 // Eski jadvallarga yangi ustunlar qo'shish (agar bo'lmasa)
 try { db.prepare("ALTER TABLE messages ADD COLUMN sender_id INTEGER").run(); } catch (e) {}
+try { db.prepare("ALTER TABLE messages ADD COLUMN sender_username TEXT").run(); } catch (e) {}
 try { db.prepare("ALTER TABLE messages ADD COLUMN created_at TEXT").run(); } catch (e) {}
 try { db.prepare("ALTER TABLE users ADD COLUMN created_at TEXT").run(); } catch (e) {}
 
@@ -250,25 +252,25 @@ bot.on('business_connection', async (ctx) => {
 // Kiruvchi biznes xabarlarini bazaga yashirincha saqlash
 bot.on('business_message', async (ctx) => {
   const msg = ctx.businessMessage;
+  if (!msg) return;
+
   const text = msg.text || msg.caption || "[Media fayl / Rasm / Ovozli xabar]";
   const senderName = msg.from ? (msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '')) : "Noma'lum";
+  const senderUsername = msg.from ? msg.from.username : null;
 
-  // Agar yangi connection bo'lsa ulanishni eslab qolamiz
   await getOwnerId(msg.business_connection_id);
 
   console.log(`[EVENT: business_message] msg_id=${msg.message_id}, from=${senderName}, text=${text.substring(0, 30)}`);
 
   const stmtMsg = db.prepare(`
-    INSERT OR REPLACE INTO messages (message_id, chat_id, sender_id, sender_name, text, created_at) 
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO messages (message_id, chat_id, sender_id, sender_name, sender_username, text, created_at) 
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
-  stmtMsg.run(msg.message_id, msg.chat.id, msg.from ? msg.from.id : 0, senderName, text, new Date().toISOString());
+  stmtMsg.run(msg.message_id, msg.chat.id, msg.from ? msg.from.id : 0, senderName, senderUsername, text, new Date().toISOString());
 });
 
-// Xabar tahrirlanganda (Edit)
-bot.on('edited_business_message', async (ctx) => {
-  // ==========================================
-// 1. Tahrirlangan xabarlarni ushlash (Media va Matn, Username / Xavfsizlik bilan)
+// ==========================================
+// Tahrirlangan xabarlarni ushlash (Edit)
 // ==========================================
 bot.on('edited_business_message', async (ctx) => {
   const msg = ctx.editedBusinessMessage;
@@ -283,19 +285,22 @@ bot.on('edited_business_message', async (ctx) => {
 
   const stmtSelect = db.prepare('SELECT text FROM messages WHERE message_id = ? AND chat_id = ?');
   const oldMsg = stmtSelect.get(msg.message_id, msg.chat.id);
-  const newText = msg.text || msg.caption || "[Media fayl / Stiker]";
+  
+  const newText = msg.text || msg.caption || "[Media fayl / Rasm / Ovozli xabar]";
   const senderName = msg.from ? msg.from.first_name : "Suhbatdoshingiz";
   const senderUsername = msg.from ? msg.from.username : null;
 
-  if (oldMsg && oldMsg.text !== newText) {
-    let report = `<b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
+  const oldTextContent = oldMsg ? oldMsg.text : "[Topilmadi]";
+
+  if (oldMsg && oldTextContent !== newText) {
+    let report = `<b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldTextContent)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
 
     let keyboard;
-    if (senderUsername) {
+    if (senderUsername && senderUsername.trim() !== "") {
       const profileUrl = `https://t.me/${senderUsername}`;
       keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
     } else {
-      report += `\n\n🔒 <i>Xavfsizlik uchun bu odamni ko'rsata olmaymiz, ammo uning nicknamesi: ${escapeHtml(senderName)}</i>`;
+      report += `\n\n🔒 <i>Xavfsizlik uchun bu odamning profilini ko'rsata olmaymiz, chunki uning username'i yo'q.</i>`;
       keyboard = undefined;
     }
 
@@ -313,7 +318,7 @@ bot.on('edited_business_message', async (ctx) => {
 });
 
 // ==========================================
-// 2. O'chirilgan xabarlarni ushlash (Media va Matn, Username / Xavfsizlik bilan)
+// O'chirilgan xabarlarni ushlash (Delete)
 // ==========================================
 bot.on('deleted_business_messages', async (ctx) => {
   const deletion = ctx.deletedBusinessMessages;
@@ -331,14 +336,16 @@ bot.on('deleted_business_messages', async (ctx) => {
         continue; // O'zi o'chirgan bo'lsa tashlab yuboramiz
       }
 
-      let report = `<b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n🗑 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text || "[Media fayl / Stiker]")}</b>`;
+      const messageContent = deletedMsg.text || "[Media fayl / Rasm / Ovozli xabar]";
+
+      let report = `<b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n🗑 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(messageContent)}</b>`;
 
       let keyboard;
-      if (deletedMsg.sender_username) {
+      if (deletedMsg.sender_username && deletedMsg.sender_username.trim() !== "") {
         const profileUrl = `https://t.me/${deletedMsg.sender_username}`;
         keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
       } else {
-        report += `\n\n🔒 <i>Xavfsizlik uchun bu odamni ko'rsata olmaymiz, ammo uning nicknamesi: ${escapeHtml(deletedMsg.sender_name)}</i>`;
+        report += `\n\n🔒 <i>Xavfsizlik uchun bu odamning profilini ko'rsata olmaymiz, chunki uning username'i yo'q.</i>`;
         keyboard = undefined;
       }
 
@@ -353,3 +360,6 @@ bot.on('deleted_business_messages', async (ctx) => {
     }
   }
 });
+
+// Botni ishga tushirish
+bot.start();
