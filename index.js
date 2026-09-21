@@ -290,8 +290,15 @@ bot.on('edited_business_message', async (ctx) => {
 
   if (oldMsg && oldMsg.text !== newText) {
     const report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
+    
+    // Foydalanuvchi profiliga o'tish uchun tugma
+    const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${msg.from.id}`);
+
     try {
-      await bot.api.sendMessage(ownerId, report, { parse_mode: 'HTML' });
+      await bot.api.sendMessage(ownerId, report, { 
+        parse_mode: 'HTML',
+        reply_markup: keyboard
+      });
       console.log(`[BILDIRISHNOMA] Edit xabari egasiga (${ownerId}) yetkazildi!`);
     } catch (err) {
       console.log("[XATO] Edit xabarini yuborishda:", err.message);
@@ -325,8 +332,15 @@ bot.on('deleted_business_messages', async (ctx) => {
       }
 
       const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
+      
+      // Foydalanuvchi profiliga o'tish uchun tugma (sender_id bazadan olinadi)
+      const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${deletedMsg.sender_id}`);
+
       try {
-        await bot.api.sendMessage(ownerId, report, { parse_mode: 'HTML' });
+        await bot.api.sendMessage(ownerId, report, { 
+          parse_mode: 'HTML',
+          reply_markup: keyboard
+        });
         console.log(`[BILDIRISHNOMA] Delete xabari egasiga (${ownerId}) yetkazildi!`);
       } catch (err) {
         console.log("[XATO] Delete xabarini yuborishda:", err.message);
