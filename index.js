@@ -364,3 +364,62 @@ bot.start({
     console.log(`🛡 Sergak Bot (@${botInfo.username}) to'liq BEPUL rejimda ishga tushdi!`);
   }
 });
+
+// ==========================================
+// ADMIN BUYruqlari (Statistika va Rassilka)
+// ==========================================
+
+// O'zingizning Telegram ID raqamingizni shu yerga yozing:
+const ADMIN_ID = 7967211137; // <-- 123456789 o'rniga o'z ID raqamingizni yozing
+
+// 1. Bot statistikasi (/stats)
+bot.command('stats', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
+  }
+
+  try {
+    const userCountRow = db.prepare('SELECT COUNT(*) as count FROM users').get();
+    const totalUsers = userCountRow ? userCountRow.count : 0;
+
+    const statsText = `
+📊 <b>Bot Statistikasi:</b>
+
+👥 Jami foydalanuvchilar: <b>${totalUsers} ta</b>
+🛡 Holati: <b>Faol va barqaror ishlayapti</b>
+    `;
+    await ctx.reply(statsText, { parse_mode: 'HTML' });
+  } catch (err) {
+    await ctx.reply("Statistikani olishda xatolik yuz berdi: " + err.message);
+  }
+});
+
+// 2. Hammaga xabar yuborish (/send)
+bot.command('send', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.reply("Bu buyruq faqat bot egasi uchun!");
+  }
+
+  const messageText = ctx.match;
+  if (!messageText) {
+    return ctx.reply("Iltimos, xabar matnini ham yozing.\nMasalan: /send Salom hammaga!");
+  }
+
+  const users = db.prepare('SELECT user_id FROM users').all();
+  
+  let successCount = 0;
+  let failCount = 0;
+
+  await ctx.reply(`⏳ Xabar ${users.length} ta foydalanuvchiga yuborilmoqda...`);
+
+  for (const user of users) {
+    try {
+      await bot.api.sendMessage(user.user_id, messageText, { parse_mode: 'HTML' });
+      successCount++;
+    } catch (err) {
+      failCount++; // Botni bloklaganlar yoki o'chirib yuborganlar
+    }
+  }
+
+  await ctx.reply(`✅ Rassilka yakunlandi!\n\n🟢 Muvaffaqiyatli: ${successCount}\n🔴 Xato (bloklaganlar): ${failCount}`);
+});
