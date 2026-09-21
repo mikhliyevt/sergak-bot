@@ -295,7 +295,8 @@ bot.on('edited_business_message', async (ctx) => {
     const profileUrl = msg.from.username 
       ? `https://t.me/${msg.from.username}` 
       : `tg://user?id=${msg.from.id}`;
-    const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
+    const profileUrl = msg.from.username ? `https://t.me/${msg.from.username}` : `tg://user?id=${msg.from.id}`;
+const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
 
     try {
       await bot.api.sendMessage(ownerId, report, { 
@@ -336,7 +337,8 @@ bot.on('deleted_business_messages', async (ctx) => {
 
       const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
       
-      const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${deletedMsg.sender_id}`);
+      const profileUrl = deletedMsg.sender_username ? `https://t.me/${deletedMsg.sender_username}` : `tg://user?id=${deletedMsg.sender_id}`;
+const keyboard = new InlineKeyboard().url("👤 Profilni ko'rish", profileUrl);
 
       try {
         await bot.api.sendMessage(ownerId, report, { 
@@ -366,11 +368,10 @@ bot.start({
 });
 
 // ==========================================
-// ADMIN: Statistika, 10 talik Sahifalash, Excel va Rasmli/Videoli Rassilka
+// ADMIN: Statistika, Sahifalash, Excel va Rassilka (Xatosiz versiya)
 // ==========================================
 
-// O'zingizning Telegram ID raqamingizni shu yerga yozing:
-const ADMIN_ID = 7967211137; // <-- 123456789 o'rniga o'z ID raqamingizni yozing
+const ADMIN_ID = 7967211137; // <-- O'z ID raqamingizni yozing
 
 // 1. Bot statistikasi (/stats)
 bot.command('stats', async (ctx) => {
@@ -379,7 +380,7 @@ bot.command('stats', async (ctx) => {
   }
 
   try {
-    const userCountRow = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM messages').get();
+    const userCountRow = db.prepare('SELECT COUNT(DISTINCT sender_id) as count FROM messages').get();
     const totalUsers = userCountRow ? userCountRow.count : 0;
 
     const statsText = `
@@ -404,8 +405,8 @@ bot.command('followers', async (ctx) => {
   const limit = 10;
   const offset = (page - 1) * limit;
 
-  const users = db.prepare('SELECT user_id, sender_name, sender_username FROM messages GROUP BY user_id LIMIT ? OFFSET ?').all(limit, offset);
-  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM messages').get();
+  const users = db.prepare('SELECT sender_id, sender_name, sender_username FROM messages GROUP BY sender_id LIMIT ? OFFSET ?').all(limit, offset);
+  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT sender_id) as count FROM messages').get();
   const totalUsers = totalCountRow ? totalCountRow.count : 0;
   const totalPages = Math.ceil(totalUsers / limit) || 1;
 
@@ -415,7 +416,7 @@ bot.command('followers', async (ctx) => {
 
   let text = `👥 <b>Foydalanuvchilar ro'yxati (Sahifa ${page}/${totalPages}):</b>\n\n`;
   users.forEach((u, index) => {
-    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.user_id}`;
+    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.sender_id}`;
     text += `${offset + index + 1}. ${u.sender_name || 'Noma\'lum'} (${usernameStr})\n`;
   });
 
@@ -437,8 +438,8 @@ bot.callbackQuery(/^page_(\d+)$/, async (ctx) => {
   const limit = 10;
   const offset = (page - 1) * limit;
 
-  const users = db.prepare('SELECT user_id, sender_name, sender_username FROM messages GROUP BY user_id LIMIT ? OFFSET ?').all(limit, offset);
-  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM messages').get();
+  const users = db.prepare('SELECT sender_id, sender_name, sender_username FROM messages GROUP BY sender_id LIMIT ? OFFSET ?').all(limit, offset);
+  const totalCountRow = db.prepare('SELECT COUNT(DISTINCT sender_id) as count FROM messages').get();
   const totalUsers = totalCountRow ? totalCountRow.count : 0;
   const totalPages = Math.ceil(totalUsers / limit) || 1;
 
@@ -448,7 +449,7 @@ bot.callbackQuery(/^page_(\d+)$/, async (ctx) => {
 
   let text = `👥 <b>Foydalanuvchilar ro'yxati (Sahifa ${page}/${totalPages}):</b>\n\n`;
   users.forEach((u, index) => {
-    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.user_id}`;
+    const usernameStr = u.sender_username ? `@${u.sender_username}` : `ID: ${u.sender_id}`;
     text += `${offset + index + 1}. ${u.sender_name || 'Noma\'lum'} (${usernameStr})\n`;
   });
 
@@ -471,17 +472,17 @@ bot.command('export', async (ctx) => {
   }
 
   try {
-    const users = db.prepare('SELECT DISTINCT user_id, sender_name, sender_username, created_at FROM messages').all();
+    const users = db.prepare('SELECT DISTINCT sender_id, sender_name, sender_username, created_at FROM messages').all();
 
     if (users.length === 0) {
       return ctx.reply("Eksport qilish uchun ma'lumotlar topilmadi.");
     }
 
-    let csvContent = "User ID,Ism,Username,Sana\n";
+    let csvContent = "Sender ID,Ism,Username,Sana\n";
     users.forEach(u => {
       const name = `"${(u.sender_name || '').replace(/"/g, '""')}"`;
       const username = u.sender_username ? `"@${u.sender_username}"` : '"Yo\'q"';
-      csvContent += `${u.user_id},${name},${username},"${u.created_at || ''}"\n`;
+      csvContent += `${u.sender_id},${name},${username},"${u.created_at || ''}"\n`;
     });
 
     const buffer = Buffer.from(csvContent, 'utf-8');
@@ -494,20 +495,18 @@ bot.command('export', async (ctx) => {
 });
 
 // 4. Rasmli, videoli yoki matnli reklama tarqatish (/send)
-// Qanday ishlatiladi: Rasm yoki videoga izoh (caption) yozib, ostiga /send deb yuborasiz
 bot.command('send', async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply("Bu buyruq faqat bot egasi uchun!");
   }
 
-  // Xabar rasm, video yoki oddiy matn ekanligini aniqlaymiz (reply qilingan xabar orqali)
   const repliedMsg = ctx.message.reply_to_message;
   
   if (!repliedMsg) {
     return ctx.reply("⚠️ Rassilka qilish uchun biron bir xabarga (rasm, video yoki matn) <b>reply</b> qilib, ustiga <b>/send</b> deb yozing!", { parse_mode: 'HTML' });
   }
 
-  const users = db.prepare('SELECT DISTINCT user_id FROM messages').all();
+  const users = db.prepare('SELECT DISTINCT sender_id FROM messages').all();
   
   let successCount = 0;
   let failCount = 0;
@@ -516,11 +515,10 @@ bot.command('send', async (ctx) => {
 
   for (const user of users) {
     try {
-      // Reply qilingan xabarni foydalanuvchiga nusxalab yuboramiz (rasm, video, matn - farqi yo'q)
-      await ctx.api.copyMessage(user.user_id, ctx.chat.id, repliedMsg.message_id);
+      await ctx.api.copyMessage(user.sender_id, ctx.chat.id, repliedMsg.message_id);
       successCount++;
     } catch (err) {
-      failCount++; // Botni bloklaganlar
+      failCount++;
     }
   }
 
