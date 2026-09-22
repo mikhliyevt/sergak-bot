@@ -296,18 +296,23 @@ bot.on('business_connection', async (ctx) => {
 bot.on('business_message', async (ctx) => {
   const msg = ctx.businessMessage;
   const text = msg.text || msg.caption || "[Media fayl / Rasm / Ovozli xabar]";
-  const senderName = msg.from ? (msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '')) : "Noma'lum";
+  
+  // Yuboruvchi ID sini aniqlash (msg.from bo'lmasa, chat.id olinadi)
+  const senderId = msg.from ? msg.from.id : msg.chat.id;
+  const senderName = msg.from 
+    ? (msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '')) 
+    : (msg.chat.first_name ? msg.chat.first_name : "Suhbatdosh");
 
   // Agar yangi connection bo'lsa ulanishni eslab qolamiz
   await getOwnerId(msg.business_connection_id);
 
-  console.log(`[EVENT: business_message] msg_id=${msg.message_id}, from=${senderName}, text=${text.substring(0, 30)}`);
+  console.log(`[EVENT: business_message] msg_id=${msg.message_id}, sender_id=${senderId}, text=${text.substring(0, 30)}`);
 
   const stmtMsg = db.prepare(`
     INSERT OR REPLACE INTO messages (message_id, chat_id, sender_id, sender_name, text, created_at) 
     VALUES (?, ?, ?, ?, ?, ?)
   `);
-  stmtMsg.run(msg.message_id, msg.chat.id, msg.from ? msg.from.id : 0, senderName, text, new Date().toISOString());
+  stmtMsg.run(msg.message_id, msg.chat.id, senderId, senderName, text, new Date().toISOString());
 });
 
 // Xabar tahrirlanganda (Edit)
@@ -322,8 +327,10 @@ bot.on('edited_business_message', async (ctx) => {
     return;
   }
 
+  const senderId = msg.from ? msg.from.id : msg.chat.id;
+
   // AGAR XABARNI AKKAUNT EGASI (SIZ) O'ZINGIZ TAHRIRLAGAN BO'LSANGIZ, BILDIRISHNOMA KERAK EMAS
-  if (msg.from && msg.from.id === ownerId) {
+  if (senderId === ownerId) {
     console.log("[FILTR] Akkaunt egasi o'zi edit qildi, e'tiborga olinmadi.");
     return;
   }
@@ -331,13 +338,13 @@ bot.on('edited_business_message', async (ctx) => {
   const stmtSelect = db.prepare('SELECT text FROM messages WHERE message_id = ? AND chat_id = ?');
   const oldMsg = stmtSelect.get(msg.message_id, msg.chat.id);
   const newText = msg.text || msg.caption || "[Media fayl / Stiker]";
-  const senderName = msg.from ? msg.from.first_name : "Suhbatdoshingiz";
+  const senderName = msg.from ? msg.from.first_name : (msg.chat.first_name || "Suhbatdoshingiz");
 
   if (oldMsg && oldMsg.text !== newText) {
     const report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
     
     // Telegram ID orqali Profil egasiga o'tish tugmasi
-    const keyboard = msg.from ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${msg.from.id}`) : undefined;
+    const keyboard = senderId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${senderId}`) : undefined;
 
     try {
       await bot.api.sendMessage(ownerId, report, { 
@@ -378,8 +385,9 @@ bot.on('deleted_business_messages', async (ctx) => {
 
       const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
       
-      // Telegram ID orqali Profil egasiga o'tish tugmasi
-      const keyboard = deletedMsg.sender_id ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${deletedMsg.sender_id}`) : undefined;
+      // Telegram ID orqali Profil egasiga o'tish tugmasi (agar ID mavjud va 0 bo'lmasa)
+      const targetId = (deletedMsg.sender_id && deletedMsg.sender_id !== 0) ? deletedMsg.sender_id : deletion.chat.id;
+      const keyboard = targetId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetId}`) : undefined;
 
       try {
         await bot.api.sendMessage(ownerId, report, { 
