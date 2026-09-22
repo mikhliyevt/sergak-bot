@@ -4,12 +4,12 @@ module.exports = {
 
 Ushbu bot profilingizga ulanib, sizga kelgan va keyinchalik o'chirilgan yoki tahrirlangan barcha xabarlarni maxfiy tarzda yetkazib beradi.
 
-📸 <b>Shuningdek:</b> Instagram Story yuklash va Tanlangan insonlarni kuzatish funksiyalari mavjud!
+📸 <b>Telegram Story Downloader:</b> Istalgan foydalanuvchining <code>@username</code>ini yuboring va xufyona Story'larini yuklab oling!
 
 🎁 <b>Bot xizmati 100% BEPUL!</b>
 🔒 <b>100% Maxfiy:</b> Suhbatdoshingiz sizda bu bot borligini aslo bilmaydi!
 
-Quyidagi bo'limlardan birini tanlang 👇
+Qurilmangiz turini tanlang va botni profilingizga ulang 👇
 `,
 
   helpIphone: `
@@ -40,7 +40,7 @@ Quyidagi bo'limlardan birini tanlang 👇
 
 1️⃣ Kompyuteringizda Telegram dasturini oching.
 2️⃣ <b>Sozlamalar (Settings / Настройки)</b> bo'limiga kiring.
-3️⃣ <b>"Akkaunt" (Account / Аккаунт)</b> bo me'yoriy bo'limga kiring.
+3️⃣ <b>"Akkaunt" (Account / Аккаунт)</b> bo'limiga kiring.
 4️⃣ <b>"Chat automation" (Автоматизация чатов)</b> bo'limini tanlang.
 5️⃣ Qidiruv maydoniga <b>@{botUsername}</b> deb yozing va ulab qo'ying.
 
@@ -63,7 +63,7 @@ Agar bot sizga yoqqan bo'lsa va loyiha rivojini qo'llab-quvvatlamoqchi bo'lsangi
 1. Siz botni Telegram Business orqali profilingizga ulaysiz.
 2. Suhbatdoshingiz sizga shaxsiy xabar yozganida, bot uni vaqtinchalik xotiraga saqlaydi.
 3. Agar suhbatdosh xabarni <b>tahrirlasa (edit)</b> yoki <b>o'chirsa (delete)</b>, bot darhol asl matnni sizga yetkazadi.
-4. <b>Instagram Downloader:</b> Istalgan profil usernamesini yuborib Story/Highlights yuklab olishingiz mumkin.
-5. <b>Kuzatuv Tizimi:</b> Tanlangan insonlar yangi story joylasa, bot sizga zudlik bilan xabar beradi.
+4. <b>Telegram Story Downloader:</b> Botning maxsus Agent akkauntlari orqali istalgan kishining Story'larini profil egasiga sezdirmasdan yuklab olasiz.
+5. <b>Kuzatuv Tizimi:</b> Tanlangan insonlar yangi Story joylasa, bot sizga darhol yetkazadi.
 `
 };
