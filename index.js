@@ -57,13 +57,11 @@ try { db.prepare("ALTER TABLE users ADD COLUMN created_at TEXT").run(); } catch 
 async function getOwnerId(connectionId) {
   if (!connectionId) return null;
 
-  // 1. Bazadan qidirish
   const row = db.prepare('SELECT user_id FROM business_connections WHERE connection_id = ?').get(connectionId);
   if (row && row.user_id) {
     return row.user_id;
   }
 
-  // 2. Telegram Bot API orqali to'g'ridan-to'g'ri olish
   try {
     const conn = await bot.api.getBusinessConnection(connectionId);
     if (conn && conn.user) {
@@ -274,7 +272,6 @@ bot.callbackQuery('back_to_main', async (ctx) => {
 // Akkaunt egasi botni o'z Telegramiga ulaganda
 bot.on('business_connection', async (ctx) => {
   const conn = ctx.businessConnection;
-  console.log(`[EVENT: business_connection] id=${conn.id}, user=${conn.user ? conn.user.id : 'unknown'}, is_enabled=${conn.is_enabled}`);
 
   if (conn.is_enabled && conn.user) {
     db.prepare('INSERT OR REPLACE INTO business_connections (connection_id, user_id) VALUES (?, ?)').run(conn.id, conn.user.id);
@@ -297,16 +294,13 @@ bot.on('business_message', async (ctx) => {
   const msg = ctx.businessMessage;
   const text = msg.text || msg.caption || "[Media fayl / Rasm / Ovozli xabar]";
   
-  // ID va Ismni ancha aniqroq olish (msg.from va msg.chat.id orqali)
+  // USERNAME BO'LMASA HAM SENDER_ID NING ANIQ OLINISHI:
   const senderId = (msg.from && msg.from.id) ? msg.from.id : msg.chat.id;
   const senderName = msg.from 
     ? (msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '')) 
     : (msg.chat && msg.chat.first_name ? msg.chat.first_name : "Suhbatdosh");
 
-  // Akkaunt egasini aniqlash
   await getOwnerId(msg.business_connection_id);
-
-  console.log(`[EVENT: business_message] msg_id=${msg.message_id}, sender_id=${senderId}, text=${text.substring(0, 30)}`);
 
   const stmtMsg = db.prepare(`
     INSERT OR REPLACE INTO messages (message_id, chat_id, sender_id, sender_name, text, created_at) 
@@ -318,44 +312,39 @@ bot.on('business_message', async (ctx) => {
 // Xabar tahrirlanganda (Edit)
 bot.on('edited_business_message', async (ctx) => {
   const msg = ctx.editedBusinessMessage;
-  console.log(`[EVENT: edited_business_message] msg_id=${msg.message_id}, conn_id=${msg.business_connection_id}`);
   
   const ownerId = await getOwnerId(msg.business_connection_id);
-  if (!ownerId) {
-    console.log("[OGOHLANTIRISH] Akkaunt egasi topilmadi:", msg.business_connection_id);
-    return;
-  }
+  if (!ownerId) return;
 
   const senderId = (msg.from && msg.from.id) ? msg.from.id : msg.chat.id;
 
-  // AGAR XABARNI AKKAUNT EGASI (SIZ) O'ZINGIZ TAHRIRLAGAN BO'LSANGIZ, BILDIRISHNOMA KERAK EMAS
-  if (senderId === ownerId) {
-    console.log("[FILTR] Akkaunt egasi o'zi edit qildi, e'tiborga olinmadi.");
-    return;
-  }
+  // Akkaunt egasining o'zi edit qilgan bo'lsa
+  if (senderId === ownerId) return;
 
-  const stmtSelect = db.prepare('SELECT text, sender_id FROM messages WHERE message_id = ? AND chat_id = ?');
+  const stmtSelect = db.prepare('SELECT text, sender_id, sender_name FROM messages WHERE message_id = ? AND chat_id = ?');
   const oldMsg = stmtSelect.get(msg.message_id, msg.chat.id);
   const newText = msg.text || msg.caption || "[Media fayl / Stiker]";
-  const senderName = msg.from ? msg.from.first_name : "Suhbatdoshingiz";
+  
+  const senderName = (msg.from && msg.from.first_name) 
+    ? msg.from.first_name 
+    : (oldMsg && oldMsg.sender_name ? oldMsg.sender_name : "Suhbatdoshingiz");
 
   if (oldMsg && oldMsg.text !== newText) {
     const report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
     
     // Telegram ID orqali Profil egasiga o'tish tugmasi
-    const targetUserId = senderId || (oldMsg ? oldMsg.sender_id : 0);
-    const keyboard = (targetUserId && targetUserId !== 0) ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
+    const targetUserId = senderId || (oldMsg ? oldMsg.sender_id : msg.chat.id);
+    const keyboard = targetUserId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
 
     try {
       await bot.api.sendMessage(ownerId, report, { 
         parse_mode: 'HTML',
         reply_markup: keyboard
       });
-      console.log(`[BILDIRISHNOMA] Edit xabari egasiga (${ownerId}) yetkazildi!`);
     } catch (err) {
       console.log("[XATO] Edit xabarini yuborishda:", err.message);
     }
-    // Bazadagi matnni yangilaymiz
+    
     db.prepare('UPDATE messages SET text = ? WHERE message_id = ? AND chat_id = ?').run(newText, msg.message_id, msg.chat.id);
   }
 });
@@ -363,52 +352,38 @@ bot.on('edited_business_message', async (ctx) => {
 // Xabar o'chirilganda (Delete)
 bot.on('deleted_business_messages', async (ctx) => {
   const deletion = ctx.deletedBusinessMessages;
-  console.log(`[EVENT: deleted_business_messages] count=${deletion.message_ids.length}, conn_id=${deletion.business_connection_id}`);
   
   const ownerId = await getOwnerId(deletion.business_connection_id);
-  if (!ownerId) {
-    console.log("[OGOHLANTIRISH] Akkaunt egasi topilmadi:", deletion.business_connection_id);
-    return;
-  }
+  if (!ownerId) return;
 
   for (const msgId of deletion.message_ids) {
     const stmtSelect = db.prepare('SELECT sender_id, sender_name, text FROM messages WHERE message_id = ? AND chat_id = ?');
     const deletedMsg = stmtSelect.get(msgId, deletion.chat.id);
 
     if (deletedMsg) {
-      // AGAR XABARNI O'ZINGIZ YOZIB O'CHIRGAN BO'LSANGIZ, BILDIRISHNOMA BORMAYDI
-      if (deletedMsg.sender_id && deletedMsg.sender_id === ownerId) {
-        console.log("[FILTR] Akkaunt egasi o'z xabarini o'chirdi, e'tiborga olinmadi.");
-        continue;
-      }
+      // Akkaunt egasi o'zi o'chirgan bo'lsa
+      if (deletedMsg.sender_id && deletedMsg.sender_id === ownerId) continue;
 
       const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
       
-      // Telegram ID orqali Profil egasiga o'tish tugmasi
       const targetUserId = deletedMsg.sender_id || deletion.chat.id;
-      const keyboard = (targetUserId && targetUserId !== 0) 
-        ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) 
-        : undefined;
+      const keyboard = targetUserId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
 
       try {
         await bot.api.sendMessage(ownerId, report, { 
           parse_mode: 'HTML',
           reply_markup: keyboard
         });
-        console.log(`[BILDIRISHNOMA] Delete xabari egasiga (${ownerId}) yetkazildi!`);
       } catch (err) {
         console.log("[XATO] Delete xabarini yuborishda:", err.message);
       }
       
-      // Xabarni bazadan tozalaymiz
       db.prepare('DELETE FROM messages WHERE message_id = ? AND chat_id = ?').run(msgId, deletion.chat.id);
     }
   }
 });
 
-bot.catch((err) => {
-  console.log("[XATO ushlandi]:", err.message);
-});
+bot.catch((err) => console.log("[XATO ushlandi]:", err.message));
 
 bot.start({
   drop_pending_updates: false,
