@@ -14,8 +14,9 @@ http.createServer((req, res) => {
 
 const bot = new Bot(process.env.BOT_TOKEN);
 const db = new Database('./messages.db');
+const ADMIN_ID = 7967211137;
 
-// HTML xavfsiz qilish uchun yordamchi funksiya
+// HTML xavfsiz qilish uchun yordamchi funksiyalar
 function escapeHtml(text) {
   if (!text) return '';
   return String(text)
@@ -111,6 +112,50 @@ bot.command(['start', 'help'], async (ctx) => {
     parse_mode: 'HTML',
     reply_markup: getMainKeyboard()
   });
+});
+
+// Admin Statistikasi buyrug'i (/stat)
+bot.command('stat', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) return;
+
+  const usersCount = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+  const connectionsCount = db.prepare('SELECT COUNT(*) AS count FROM business_connections').get().count;
+  const messagesCount = db.prepare('SELECT COUNT(*) AS count FROM messages').get().count;
+
+  const statText = `📊 <b>Bot statistikasi:</b>\n\n` +
+    `👤 <b>Jami foydalanuvchilar:</b> ${usersCount}\n` +
+    `🔗 <b>Faol ulanishlar:</b> ${connectionsCount}\n` +
+    `💬 <b>Saqlangan xabarlar:</b> ${messagesCount}`;
+
+  await ctx.reply(statText, { parse_mode: 'HTML' });
+});
+
+// Admin Reklama yuborish buyrug'i (/broadcast yoki /reklama)
+bot.command(['broadcast', 'reklama'], async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) return;
+
+  const targetMsg = ctx.message.reply_to_message;
+  if (!targetMsg) {
+    await ctx.reply("⚠️ Reklama yuborish uchun reklama postiga (rasm, video yoki matn) <b>reply</b> qilib <code>/broadcast</code> deb yozing.", { parse_mode: 'HTML' });
+    return;
+  }
+
+  const users = db.prepare('SELECT user_id FROM users').all();
+  let success = 0;
+  let failed = 0;
+
+  await ctx.reply(`🚀 Reklama yuborish boshlandi... Jami: ${users.length} ta foydalanuvchi.`);
+
+  for (const user of users) {
+    try {
+      await bot.api.copyMessage(user.user_id, ctx.chat.id, targetMsg.message_id);
+      success++;
+    } catch (err) {
+      failed++;
+    }
+  }
+
+  await ctx.reply(`✅ <b>Reklama yakunlandi!</b>\n\n🟢 Yuborildi: ${success}\n🔴 Muvaffaqiyatsiz (bloklagan): ${failed}`, { parse_mode: 'HTML' });
 });
 
 // Yo'riqnoma tugmalari (iPhone)
@@ -290,8 +335,15 @@ bot.on('edited_business_message', async (ctx) => {
 
   if (oldMsg && oldMsg.text !== newText) {
     const report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
+    
+    // Telegram ID orqali Profil egasiga o'tish tugmasi
+    const keyboard = msg.from ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${msg.from.id}`) : undefined;
+
     try {
-      await bot.api.sendMessage(ownerId, report, { parse_mode: 'HTML' });
+      await bot.api.sendMessage(ownerId, report, { 
+        parse_mode: 'HTML',
+        reply_markup: keyboard
+      });
       console.log(`[BILDIRISHNOMA] Edit xabari egasiga (${ownerId}) yetkazildi!`);
     } catch (err) {
       console.log("[XATO] Edit xabarini yuborishda:", err.message);
@@ -325,8 +377,15 @@ bot.on('deleted_business_messages', async (ctx) => {
       }
 
       const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
+      
+      // Telegram ID orqali Profil egasiga o'tish tugmasi
+      const keyboard = deletedMsg.sender_id ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${deletedMsg.sender_id}`) : undefined;
+
       try {
-        await bot.api.sendMessage(ownerId, report, { parse_mode: 'HTML' });
+        await bot.api.sendMessage(ownerId, report, { 
+          parse_mode: 'HTML',
+          reply_markup: keyboard
+        });
         console.log(`[BILDIRISHNOMA] Delete xabari egasiga (${ownerId}) yetkazildi!`);
       } catch (err) {
         console.log("[XATO] Delete xabarini yuborishda:", err.message);
