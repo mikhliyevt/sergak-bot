@@ -43,6 +43,8 @@ db.exec(`
     sender_id INTEGER,
     sender_name TEXT,
     text TEXT,
+    media_type TEXT,
+    file_id TEXT,
     created_at TEXT,
     PRIMARY KEY (message_id, chat_id)
   );
@@ -52,6 +54,8 @@ db.exec(`
 try { db.prepare("ALTER TABLE messages ADD COLUMN sender_id INTEGER").run(); } catch (e) {}
 try { db.prepare("ALTER TABLE messages ADD COLUMN created_at TEXT").run(); } catch (e) {}
 try { db.prepare("ALTER TABLE users ADD COLUMN created_at TEXT").run(); } catch (e) {}
+try { db.prepare("ALTER TABLE messages ADD COLUMN media_type TEXT").run(); } catch (e) {}
+try { db.prepare("ALTER TABLE messages ADD COLUMN file_id TEXT").run(); } catch (e) {}
 
 // Akkaunt egasini aniqlash (bazadan yoki Telegram API dan)
 async function getOwnerId(connectionId) {
@@ -76,6 +80,79 @@ async function getOwnerId(connectionId) {
   }
 
   return null;
+}
+
+// Media ma'lumotlarini va fayl turini ajratib olish funksiyasi
+function extractMediaInfo(msg) {
+  let fileId = null;
+  let mediaType = null;
+  let text = msg.text || msg.caption || '';
+
+  if (msg.photo) {
+    fileId = msg.photo[msg.photo.length - 1].file_id;
+    mediaType = 'photo';
+  } else if (msg.video) {
+    fileId = msg.video.file_id;
+    mediaType = 'video';
+  } else if (msg.voice) {
+    fileId = msg.voice.file_id;
+    mediaType = 'voice';
+  } else if (msg.audio) {
+    fileId = msg.audio.file_id;
+    mediaType = 'audio';
+  } else if (msg.document) {
+    fileId = msg.document.file_id;
+    mediaType = 'document';
+  } else if (msg.video_note) {
+    fileId = msg.video_note.file_id;
+    mediaType = 'video_note';
+  } else if (msg.sticker) {
+    fileId = msg.sticker.file_id;
+    mediaType = 'sticker';
+  }
+
+  return { fileId, mediaType, text };
+}
+
+// Mediani foydalanuvchiga qayta yuboruvchi yordamchi funksiya
+async function sendMediaReport(ownerId, reportText, mediaType, fileId, keyboard) {
+  const options = { parse_mode: 'HTML', reply_markup: keyboard };
+
+  if (!fileId || !mediaType) {
+    await bot.api.sendMessage(ownerId, reportText, options);
+    return;
+  }
+
+  options.caption = reportText;
+
+  switch (mediaType) {
+    case 'photo':
+      await bot.api.sendPhoto(ownerId, fileId, options);
+      break;
+    case 'video':
+      await bot.api.sendVideo(ownerId, fileId, options);
+      break;
+    case 'voice':
+      await bot.api.sendVoice(ownerId, fileId, options);
+      break;
+    case 'audio':
+      await bot.api.sendAudio(ownerId, fileId, options);
+      break;
+    case 'document':
+      await bot.api.sendDocument(ownerId, fileId, options);
+      break;
+    case 'video_note':
+      await bot.api.sendMessage(ownerId, reportText, { parse_mode: 'HTML' });
+      await bot.api.sendVideoNote(ownerId, fileId, { reply_markup: keyboard });
+      break;
+    case 'sticker':
+      await bot.api.sendMessage(ownerId, reportText, { parse_mode: 'HTML' });
+      await bot.api.sendSticker(ownerId, fileId, { reply_markup: keyboard });
+      break;
+    default:
+      await bot.api.sendMessage(ownerId, reportText, options);
+      break;
+  }
 }
 
 // Asosiy menyu tugmalari
@@ -251,7 +328,7 @@ bot.callbackQuery('about_bot', async (ctx) => {
 
 1. Siz botni Telegram Business orqali profilingizga ulaysiz.
 2. Suhbatdoshingiz sizga shaxsiy xabar yozganida, bot uni vaqtinchalik xotiraga saqlaydi.
-3. Agar suhbatdosh xabarni <b>tahrirlasa (edit)</b> yoki <b>o'chirsa (delete)</b>, bot darhol asl matnni sizga yetkazadi.
+3. Agar suhbatdosh xabarni <b>tahrirlasa (edit)</b> yoki <b>o'chirsa (delete)</b>, bot darhol asl matnni yoki faylni (rasm/video) sizga yetkazadi.
 4. <b>100% Yashirin:</b> Suhbatdosh sizda bot borligini sezmaydi, chunki do'stingiz bilan bo'lgan chatga hech narsa yozilmaydi.
 5. Agar o'zingiz xabarni tahrirlasangiz yoki o'chirsangiz, bot sizni bezovta qilmaydi.
   `, { 
@@ -278,7 +355,7 @@ bot.on('business_connection', async (ctx) => {
     db.prepare('INSERT OR IGNORE INTO users (user_id, created_at) VALUES (?, ?)').run(conn.user.id, new Date().toISOString());
 
     try {
-      await bot.api.sendMessage(conn.user.id, "✅ <b>Sergak Bot profilingizga muvaffaqiyatli ulandi!</b>\n\nEndi sizga yozib o'chirilgan yoki o'zgartirilgan barcha xabarlar to'g'ridan-to'g'ri shu yerga yetkaziladi. Xizmatdan bepul va cheksiz foydalanishingiz mumkin!", {
+      await bot.api.sendMessage(conn.user.id, "✅ <b>Sergak Bot profilingizga muvaffaqiyatli ulandi!</b>\n\nEndi sizga yozib o'chirilgan yoki o'zgartirilgan barcha xabarlar va fayllar to'g'ridan-to'g'ri shu yerga yetkaziladi. Xizmatdan bepul va cheksiz foydalanishingiz mumkin!", {
         parse_mode: 'HTML'
       });
     } catch (e) {
@@ -292,9 +369,8 @@ bot.on('business_connection', async (ctx) => {
 // Kiruvchi biznes xabarlarini bazaga yashirincha saqlash
 bot.on('business_message', async (ctx) => {
   const msg = ctx.businessMessage;
-  const text = msg.text || msg.caption || "[Media fayl / Rasm / Ovozli xabar]";
-  
-  // USERNAME BO'LMASA HAM SENDER_ID NING ANIQ OLINISHI:
+  const { fileId, mediaType, text } = extractMediaInfo(msg);
+
   const senderId = (msg.from && msg.from.id) ? msg.from.id : msg.chat.id;
   const senderName = msg.from 
     ? (msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '')) 
@@ -303,10 +379,10 @@ bot.on('business_message', async (ctx) => {
   await getOwnerId(msg.business_connection_id);
 
   const stmtMsg = db.prepare(`
-    INSERT OR REPLACE INTO messages (message_id, chat_id, sender_id, sender_name, text, created_at) 
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO messages (message_id, chat_id, sender_id, sender_name, text, media_type, file_id, created_at) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  stmtMsg.run(msg.message_id, msg.chat.id, senderId, senderName, text, new Date().toISOString());
+  stmtMsg.run(msg.message_id, msg.chat.id, senderId, senderName, text, mediaType, fileId, new Date().toISOString());
 });
 
 // Xabar tahrirlanganda (Edit)
@@ -321,31 +397,35 @@ bot.on('edited_business_message', async (ctx) => {
   // Akkaunt egasining o'zi edit qilgan bo'lsa
   if (senderId === ownerId) return;
 
-  const stmtSelect = db.prepare('SELECT text, sender_id, sender_name FROM messages WHERE message_id = ? AND chat_id = ?');
+  const stmtSelect = db.prepare('SELECT text, media_type, file_id, sender_id, sender_name FROM messages WHERE message_id = ? AND chat_id = ?');
   const oldMsg = stmtSelect.get(msg.message_id, msg.chat.id);
-  const newText = msg.text || msg.caption || "[Media fayl / Stiker]";
+  const { fileId: newFileId, mediaType: newMediaType, text: newText } = extractMediaInfo(msg);
   
   const senderName = (msg.from && msg.from.first_name) 
     ? msg.from.first_name 
     : (oldMsg && oldMsg.sender_name ? oldMsg.sender_name : "Suhbatdoshingiz");
 
-  if (oldMsg && oldMsg.text !== newText) {
-    const report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n⏳ <b>Eski:</b> <s>${escapeHtml(oldMsg.text)}</s>\n🔄 <b>Yangi:</b> <b>${escapeHtml(newText)}</b>`;
+  if (oldMsg && (oldMsg.text !== newText || oldMsg.file_id !== newFileId)) {
+    let report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n`;
     
-    // Telegram ID orqali Profil egasiga o'tish tugmasi
+    if (oldMsg.text) {
+      report += `⏳ <b>Eski matn:</b> <s>${escapeHtml(oldMsg.text)}</s>\n`;
+    }
+    if (newText) {
+      report += `🔄 <b>Yangi matn:</b> <b>${escapeHtml(newText)}</b>`;
+    }
+
     const targetUserId = senderId || (oldMsg ? oldMsg.sender_id : msg.chat.id);
     const keyboard = targetUserId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
 
     try {
-      await bot.api.sendMessage(ownerId, report, { 
-        parse_mode: 'HTML',
-        reply_markup: keyboard
-      });
+      await sendMediaReport(ownerId, report, oldMsg.media_type, oldMsg.file_id, keyboard);
     } catch (err) {
       console.log("[XATO] Edit xabarini yuborishda:", err.message);
     }
     
-    db.prepare('UPDATE messages SET text = ? WHERE message_id = ? AND chat_id = ?').run(newText, msg.message_id, msg.chat.id);
+    db.prepare('UPDATE messages SET text = ?, media_type = ?, file_id = ? WHERE message_id = ? AND chat_id = ?')
+      .run(newText, newMediaType, newFileId, msg.message_id, msg.chat.id);
   }
 });
 
@@ -357,23 +437,25 @@ bot.on('deleted_business_messages', async (ctx) => {
   if (!ownerId) return;
 
   for (const msgId of deletion.message_ids) {
-    const stmtSelect = db.prepare('SELECT sender_id, sender_name, text FROM messages WHERE message_id = ? AND chat_id = ?');
+    const stmtSelect = db.prepare('SELECT sender_id, sender_name, text, media_type, file_id FROM messages WHERE message_id = ? AND chat_id = ?');
     const deletedMsg = stmtSelect.get(msgId, deletion.chat.id);
 
     if (deletedMsg) {
       // Akkaunt egasi o'zi o'chirgan bo'lsa
       if (deletedMsg.sender_id && deletedMsg.sender_id === ownerId) continue;
 
-      const report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n📝 <b>O'chirilgan xabar:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
-      
+      let report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n`;
+      if (deletedMsg.text) {
+        report += `📝 <b>O'chirilgan xabar matni:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
+      } else if (deletedMsg.media_type) {
+        report += `📁 <b>O'chirilgan media fayl (${deletedMsg.media_type})</b>`;
+      }
+
       const targetUserId = deletedMsg.sender_id || deletion.chat.id;
       const keyboard = targetUserId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
 
       try {
-        await bot.api.sendMessage(ownerId, report, { 
-          parse_mode: 'HTML',
-          reply_markup: keyboard
-        });
+        await sendMediaReport(ownerId, report, deletedMsg.media_type, deletedMsg.file_id, keyboard);
       } catch (err) {
         console.log("[XATO] Delete xabarini yuborishda:", err.message);
       }
