@@ -1,16 +1,9 @@
 require('dotenv').config();
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { Bot, InlineKeyboard } = require('grammy');
 const Database = require('better-sqlite3');
-
-// Bulutli serverlar (Render, Koyeb) uchun veb-server (Health Check)
-const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('🛡 Sergak Bot 24/7 faol ishlamoqda!\n');
-}).listen(PORT, () => {
-  console.log(`🌐 Server monitoring porti: ${PORT}`);
-});
 
 const bot = new Bot(process.env.BOT_TOKEN);
 const db = new Database('./messages.db');
@@ -57,6 +50,49 @@ try { db.prepare("ALTER TABLE users ADD COLUMN created_at TEXT").run(); } catch 
 try { db.prepare("ALTER TABLE messages ADD COLUMN media_type TEXT").run(); } catch (e) {}
 try { db.prepare("ALTER TABLE messages ADD COLUMN file_id TEXT").run(); } catch (e) {}
 
+// Bulutli serverlar (Render) uchun veb-server va ADMIN PANEL
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  // 1. Admin Panel sahifasi (https://sergak-bot.onrender.com/admin)
+  if (req.url === '/admin') {
+    const filePath = path.join(__dirname, 'admin.html');
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end("Admin panel fayli (admin.html) topilmadi!");
+      } else {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(data);
+      }
+    });
+  } 
+  // 2. Real statistika API (Admin panel uchun)
+  else if (req.url === '/api/stats') {
+    try {
+      const usersCount = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+      const connectionsCount = db.prepare('SELECT COUNT(*) AS count FROM business_connections').get().count;
+      const messagesCount = db.prepare('SELECT COUNT(*) AS count FROM messages').get().count;
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        users: usersCount,
+        connections: connectionsCount,
+        messages: messagesCount
+      }));
+    } catch (e) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+  }
+  // 3. Oddiy Health Check
+  else {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('🛡 Sergak Bot 24/7 faol ishlamoqda!\n');
+  }
+}).listen(PORT, () => {
+  console.log(`🌐 Server monitoring va Admin Panel porti: ${PORT}`);
+});
+
 // Akkaunt egasini aniqlash (bazadan yoki Telegram API dan)
 async function getOwnerId(connectionId) {
   if (!connectionId) return null;
@@ -82,7 +118,7 @@ async function getOwnerId(connectionId) {
   return null;
 }
 
-// Media ma'lumotlarini va fayl turini ajratib olish funksiyasi
+// Media ma'lumotlarini ajratib olish funksiyasi
 function extractMediaInfo(msg) {
   let fileId = null;
   let mediaType = null;
@@ -233,7 +269,7 @@ bot.command(['broadcast', 'reklama'], async (ctx) => {
   await ctx.reply(`✅ <b>Reklama yakunlandi!</b>\n\n🟢 Yuborildi: ${success}\n🔴 Muvaffaqiyatsiz (bloklagan): ${failed}`, { parse_mode: 'HTML' });
 });
 
-// Yo'riqnoma tugmalari (iPhone)
+// Yo'riqnoma tugmalari
 bot.callbackQuery('help_iphone', async (ctx) => {
   await ctx.answerCallbackQuery();
   const botInfo = await bot.api.getMe();
@@ -247,13 +283,9 @@ bot.callbackQuery('help_iphone', async (ctx) => {
 
 ✅ <b>Tayyor!</b> Endi barcha o'chirilgan va o'zgartirilgan xabarlar sizga keladi.
   `;
-  await ctx.reply(iphoneHelp, { 
-    parse_mode: 'HTML',
-    reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main")
-  });
+  await ctx.reply(iphoneHelp, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main") });
 });
 
-// Yo'riqnoma tugmalari (Android)
 bot.callbackQuery('help_android', async (ctx) => {
   await ctx.answerCallbackQuery();
   const botInfo = await bot.api.getMe();
@@ -268,13 +300,9 @@ bot.callbackQuery('help_android', async (ctx) => {
 
 ✅ <b>Tayyor!</b> Bot fon rejimida xabarlarni kuzatishni boshlaydi.
   `;
-  await ctx.reply(androidHelp, { 
-    parse_mode: 'HTML',
-    reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main")
-  });
+  await ctx.reply(androidHelp, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main") });
 });
 
-// Yo'riqnoma tugmalari (Desktop)
 bot.callbackQuery('help_desktop', async (ctx) => {
   await ctx.answerCallbackQuery();
   const botInfo = await bot.api.getMe();
@@ -289,13 +317,9 @@ bot.callbackQuery('help_desktop', async (ctx) => {
 
 ✅ <b>Tayyor!</b> Kompyuterda ham barcha o'chirilgan va tahrirlangan xabarlar shu botga keladi.
   `;
-  await ctx.reply(desktopHelp, { 
-    parse_mode: 'HTML',
-    reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main")
-  });
+  await ctx.reply(desktopHelp, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main") });
 });
 
-// Donat bo'limi
 bot.callbackQuery('help_donation', async (ctx) => {
   await ctx.answerCallbackQuery();
   const donationText = `
@@ -309,18 +333,10 @@ Agar bot sizga yoqqan bo'lsa va loyiha rivojini, server xarajatlarini qo'llab-qu
 
 <i>Har bir e'tibor va sovg'angiz loyihani yanada rivojlantirishga katta hissa qo'shadi! Rahmat!</i> ❤️
   `;
-  const keyboard = new InlineKeyboard()
-    .url("🎁 Sovg'a yuborish (@mikhliyevt)", "https://t.me/mikhliyevt")
-    .row()
-    .text("◀️ Ortga", "back_to_main");
-
-  await ctx.reply(donationText, {
-    parse_mode: 'HTML',
-    reply_markup: keyboard
-  });
+  const keyboard = new InlineKeyboard().url("🎁 Sovg'a yuborish (@mikhliyevt)", "https://t.me/mikhliyevt").row().text("◀️ Ortga", "back_to_main");
+  await ctx.reply(donationText, { parse_mode: 'HTML', reply_markup: keyboard });
 });
 
-// Bot haqida bo'limi
 bot.callbackQuery('about_bot', async (ctx) => {
   await ctx.answerCallbackQuery();
   await ctx.reply(`
@@ -328,25 +344,17 @@ bot.callbackQuery('about_bot', async (ctx) => {
 
 1. Siz botni Telegram Business orqali profilingizga ulaysiz.
 2. Suhbatdoshingiz sizga shaxsiy xabar yozganida, bot uni vaqtinchalik xotiraga saqlaydi.
-3. Agar suhbatdosh xabarni <b>tahrirlasa (edit)</b> yoki <b>o'chirsa (delete)</b>, bot darhol asl matnni yoki faylni (rasm/video) sizga yetkazadi.
-4. <b>100% Yashirin:</b> Suhbatdosh sizda bot borligini sezmaydi, chunki do'stingiz bilan bo'lgan chatga hech narsa yozilmaydi.
+3. Agar suhbatdosh xabarni <b>tahrirlasa (edit)</b> yoki <b>o'chirsa (delete)</b>, bot darhol asl matnni yoki faylni sizga yetkazadi.
+4. <b>100% Yashirin:</b> Suhbatdosh sizda bot borligini sezmaydi.
 5. Agar o'zingiz xabarni tahrirlasangiz yoki o'chirsangiz, bot sizni bezovta qilmaydi.
-  `, { 
-    parse_mode: 'HTML',
-    reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main")
-  });
+  `, { parse_mode: 'HTML', reply_markup: new InlineKeyboard().text("◀️ Ortga", "back_to_main") });
 });
 
-// Asosiy menyuga qaytish
 bot.callbackQuery('back_to_main', async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.reply(startMessage, {
-    parse_mode: 'HTML',
-    reply_markup: getMainKeyboard()
-  });
+  await ctx.reply(startMessage, { parse_mode: 'HTML', reply_markup: getMainKeyboard() });
 });
 
-// Akkaunt egasi botni o'z Telegramiga ulaganda
 bot.on('business_connection', async (ctx) => {
   const conn = ctx.businessConnection;
 
@@ -366,7 +374,6 @@ bot.on('business_connection', async (ctx) => {
   }
 });
 
-// Kiruvchi biznes xabarlarini bazaga yashirincha saqlash
 bot.on('business_message', async (ctx) => {
   const msg = ctx.businessMessage;
   const { fileId, mediaType, text } = extractMediaInfo(msg);
@@ -385,16 +392,12 @@ bot.on('business_message', async (ctx) => {
   stmtMsg.run(msg.message_id, msg.chat.id, senderId, senderName, text, mediaType, fileId, new Date().toISOString());
 });
 
-// Xabar tahrirlanganda (Edit)
 bot.on('edited_business_message', async (ctx) => {
   const msg = ctx.editedBusinessMessage;
-  
   const ownerId = await getOwnerId(msg.business_connection_id);
   if (!ownerId) return;
 
   const senderId = (msg.from && msg.from.id) ? msg.from.id : msg.chat.id;
-
-  // Akkaunt egasining o'zi edit qilgan bo'lsa
   if (senderId === ownerId) return;
 
   const stmtSelect = db.prepare('SELECT text, media_type, file_id, sender_id, sender_name FROM messages WHERE message_id = ? AND chat_id = ?');
@@ -407,13 +410,8 @@ bot.on('edited_business_message', async (ctx) => {
 
   if (oldMsg && (oldMsg.text !== newText || oldMsg.file_id !== newFileId)) {
     let report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n`;
-    
-    if (oldMsg.text) {
-      report += `⏳ <b>Eski matn:</b> <s>${escapeHtml(oldMsg.text)}</s>\n`;
-    }
-    if (newText) {
-      report += `🔄 <b>Yangi matn:</b> <b>${escapeHtml(newText)}</b>`;
-    }
+    if (oldMsg.text) report += `⏳ <b>Eski matn:</b> <s>${escapeHtml(oldMsg.text)}</s>\n`;
+    if (newText) report += `🔄 <b>Yangi matn:</b> <b>${escapeHtml(newText)}</b>`;
 
     const targetUserId = senderId || (oldMsg ? oldMsg.sender_id : msg.chat.id);
     const keyboard = targetUserId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
@@ -429,10 +427,8 @@ bot.on('edited_business_message', async (ctx) => {
   }
 });
 
-// Xabar o'chirilganda (Delete)
 bot.on('deleted_business_messages', async (ctx) => {
   const deletion = ctx.deletedBusinessMessages;
-  
   const ownerId = await getOwnerId(deletion.business_connection_id);
   if (!ownerId) return;
 
@@ -441,7 +437,6 @@ bot.on('deleted_business_messages', async (ctx) => {
     const deletedMsg = stmtSelect.get(msgId, deletion.chat.id);
 
     if (deletedMsg) {
-      // Akkaunt egasi o'zi o'chirgan bo'lsa
       if (deletedMsg.sender_id && deletedMsg.sender_id === ownerId) continue;
 
       let report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n`;
