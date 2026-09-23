@@ -16,85 +16,98 @@
       --success: #22c55e;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
     body { background-color: var(--bg-color); color: var(--text); display: flex; min-height: 100vh; }
 
-    /* LOGIN MODAL (ADMIN TEKSHIRUV) */
+    /* PAROL OVERLAY (KIRISH CHEKLOVI) */
     #login-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background-color: var(--bg-color); z-index: 999;
-      display: flex; align-items: center; justify-content: center;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
     }
     .login-box {
-      background: var(--card-bg); padding: 30px; border-radius: 12px;
-      border: 1px solid var(--border); text-align: center; width: 320px;
+      background: var(--card-bg); padding: 30px; border-radius: 16px;
+      border: 1px solid var(--border); text-align: center; width: 100%; max-width: 340px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     }
+    .login-box h2 { color: var(--accent); margin-bottom: 8px; }
     .login-box input {
-      width: 100%; padding: 10px; margin: 15px 0; border-radius: 6px;
-      border: 1px solid var(--border); background: #0f172a; color: white; text-align: center;
+      width: 100%; padding: 12px; margin: 18px 0; border-radius: 8px;
+      border: 1px solid var(--border); background: #0f172a; color: white; text-align: center; font-size: 1rem;
     }
 
-    /* Sidebar Navigation */
+    /* NAVIGATSIYA (SIDEBAR) */
     .sidebar { width: 250px; background-color: var(--card-bg); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 10px; }
     .sidebar h2 { font-size: 1.2rem; color: var(--accent); margin-bottom: 15px; }
-    .nav-btn { background: none; border: none; color: var(--text-muted); padding: 12px; text-align: left; font-size: 0.95rem; border-radius: 8px; cursor: pointer; }
-    .nav-btn.active, .nav-btn:hover { background-color: rgba(56, 189, 248, 0.1); color: var(--accent); }
+    .nav-btn { background: none; border: none; color: var(--text-muted); padding: 12px; text-align: left; font-size: 0.95rem; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+    .nav-btn.active, .nav-btn:hover { background-color: rgba(56, 189, 248, 0.1); color: var(--accent); font-weight: 600; }
 
-    /* Main Area */
+    /* ASOSIY EKAN */
     .main-content { flex: 1; padding: 25px; overflow-y: auto; }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* Telegram Style Post Creation Box */
+    /* STATISTIKA KARTALARI */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px; }
+    .stat-card { background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+    .stat-card h3 { font-size: 0.85rem; color: var(--text-muted); }
+    .stat-card .val { font-size: 1.8rem; font-weight: bold; margin-top: 8px; color: var(--text); }
+
+    /* TELEGRAM UGGURIDAGI POST YARATISH BOXI */
     .telegram-post-box {
       background-color: var(--card-bg); border: 1px solid var(--border);
-      border-radius: 12px; max-width: 500px; padding: 20px; margin-top: 10px;
+      border-radius: 16px; max-width: 520px; padding: 20px; margin-top: 15px;
     }
 
     .file-upload-area {
-      border: 2px dashed var(--border); border-radius: 8px; padding: 20px;
+      border: 2px dashed var(--border); border-radius: 12px; padding: 25px;
       text-align: center; cursor: pointer; margin-bottom: 15px; transition: 0.2s;
     }
     .file-upload-area:hover { border-color: var(--accent); background: rgba(56, 189, 248, 0.05); }
 
-    .preview-container { margin-bottom: 15px; display: none; text-align: center; position: relative; }
-    .preview-container img, .preview-container video { max-width: 100%; max-height: 250px; border-radius: 8px; }
+    .preview-container { margin-bottom: 15px; text-align: center; position: relative; display: none; }
+    .preview-container img, .preview-container video { max-width: 100%; max-height: 260px; border-radius: 10px; }
+    .remove-file-btn { position: absolute; top: 8px; right: 8px; background: rgba(239,68,68,0.8); color: white; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
 
     .post-text {
-      width: 100%; height: 100px; background: #0f172a; border: 1px solid var(--border);
-      border-radius: 8px; padding: 12px; color: var(--text); resize: none; font-size: 0.95rem; margin-bottom: 15px;
+      width: 100%; height: 110px; background: #0f172a; border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px; color: var(--text); resize: none; font-size: 0.95rem; margin-bottom: 15px; outline: none;
     }
+    .post-text:focus { border-color: var(--accent); }
 
     .schedule-area {
       display: flex; gap: 10px; align-items: center; margin-bottom: 15px;
-      background: #0f172a; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: #0f172a; padding: 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 0.9rem;
     }
-    .schedule-area input { background: transparent; border: none; color: white; font-size: 0.85rem; }
+    .schedule-area input { background: transparent; border: none; color: white; outline: none; }
 
     .send-btn {
       width: 100%; background: var(--accent); color: #000; font-weight: bold;
-      padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;
+      padding: 13px; border: none; border-radius: 10px; cursor: pointer; font-size: 1rem; transition: 0.2s;
     }
+    .send-btn:hover { opacity: 0.9; }
 
-    /* Stats & Users */
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
-    .stat-card { background: var(--card-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
-    .stat-card .val { font-size: 1.5rem; font-weight: bold; margin-top: 5px; }
+    /* RESPONSIVE (TELEFONLAR UCHUN) */
+    @media (max-width: 640px) {
+      body { flex-direction: column; }
+      .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+      .main-content { padding: 15px; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- ADMIN LOGIN PAROLINGIZ MASHG'ULOTI (XAVFSIZLIK) -->
+  <!-- ADMIN PAROL TEKSHIRUVI -->
   <div id="login-overlay">
     <div class="login-box">
       <h2>🔒 Admin Kirish</h2>
       <p style="font-size: 0.85rem; color: var(--text-muted);">Panelga kirish uchun parolni kiriting</p>
-      <input type="password" id="admin-pass" placeholder="Parol">
+      <input type="password" id="admin-pass" placeholder="Parol" onkeypress="if(event.key==='Enter') checkAuth()">
       <button class="send-btn" onclick="checkAuth()">Kirish</button>
     </div>
   </div>
 
-  <!-- Sidebar Navigatsiya -->
+  <!-- SIDEBAR -->
   <div class="sidebar">
     <h2>🛡 Sergak Panel</h2>
     <button class="nav-btn active" onclick="switchTab('dashboard')">📊 Statistika</button>
@@ -102,69 +115,92 @@
     <button class="nav-btn" onclick="switchTab('broadcast')">📢 Reklama Yuborish</button>
   </div>
 
-  <!-- Asosiy Ekran -->
+  <!-- ASOSIY EKRAN -->
   <div class="main-content">
 
     <!-- STATISTIKA -->
     <div id="dashboard" class="tab-content active">
-      <h2>📊 Loyiha Statistikasi</h2>
-      <br>
+      <h2>📊 Real Vaqt Statistikasi</h2>
       <div class="stats-grid">
-        <div class="stat-card"><h3>Jami Odamlar</h3><div class="val">1,248</div></div>
-        <div class="stat-card"><h3>Jonli Odamlar</h3><div class="val" style="color:var(--success)">1,180</div></div>
-        <div class="stat-card"><h3>Bloklaganlar</h3><div class="val" style="color:var(--danger)">68</div></div>
+        <div class="stat-card">
+          <h3>JAMI FOYDALANUVCHILAR</h3>
+          <div class="val" id="stat-users">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>FAOL BIZNES ULANISHLAR</h3>
+          <div class="val" id="stat-conn" style="color:var(--success)">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>SAQLANGAN XABARLAR</h3>
+          <div class="val" id="stat-msg" style="color:var(--accent)">0</div>
+        </div>
       </div>
     </div>
 
     <!-- ODAMLAR RO'YXATI -->
     <div id="users" class="tab-content">
-      <h2>👥 Foydalanuvchilar Ro'yxati</h2>
-      <p style="color: var(--text-muted); margin-top: 10px;">Foydalanuvchini tanlab yozishmalarni ko'rishingiz mumkin.</p>
+      <h2>👥 Foydalanuvchilar va Chatlar</h2>
+      <p style="color: var(--text-muted); margin-top: 10px;">Yaqin orada to'liq chatlar ko'rinishi ulanadi.</p>
     </div>
 
-    <!-- REKLAMA (TELEGRAM FORMATDA) -->
+    <!-- REKLAMA YUBORISH (TELEGRAM STILIDA) -->
     <div id="broadcast" class="tab-content">
-      <h2>📢 Yangi Post Yaratish</h2>
+      <h2>📢 Post Yaratish va Yuborish</h2>
 
       <div class="telegram-post-box">
         
-        <!-- Prevyu (Rasm/Video tanlanganda chiqadi) -->
+        <!-- Prevyu -->
         <div class="preview-container" id="preview-box">
-          <span style="position: absolute; top: 5px; right: 10px; cursor: pointer; color: red;" onclick="removeFile()">✖ O'chirish</span>
+          <span class="remove-file-btn" onclick="removeFile()">✖ O'chirish</span>
           <div id="media-preview"></div>
         </div>
 
-        <!-- Fayl Tanlash Zonasi (Skrepka uslubi) -->
+        <!-- Fayl Tanlash -->
         <div class="file-upload-area" onclick="document.getElementById('file-input').click()">
           📂 <b>Rasm yoki Video tanlang</b>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">yoki faylni shu yerga tashlang</p>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">(Xohshiy, tanlamasangiz faqat matn ketadi)</p>
           <input type="file" id="file-input" accept="image/*,video/*" style="display: none;" onchange="handleFileSelect(event)">
         </div>
 
-        <!-- Telegram Caption (Izoh) -->
-        <textarea class="post-text" id="post-caption" placeholder="Post izohini yozing (HTML teglari ishlaydi)..."></textarea>
+        <!-- Izoh (Caption) -->
+        <textarea class="post-text" id="post-caption" placeholder="Post izohini yozing (HTML format qo'llab-quvvatlanadi)..."></textarea>
 
-        <!-- Schedule Time (Vaqt belgilash) -->
+        <!-- Schedule -->
         <div class="schedule-area">
           🕒 <b>Vaqtga qo'yish:</b>
           <input type="datetime-local" id="schedule-date">
         </div>
 
         <!-- Yuborish tugmasi -->
-        <button class="send-btn" onclick="sendPost()">🚀 Yuborish</button>
+        <button class="send-btn" onclick="sendPost()">🚀 Yuborish / Rejalashtirish</button>
       </div>
     </div>
 
   </div>
 
   <script>
-    // PAROL TEKSHIRISH (ADMIN AUTH)
-    function checkAuth() {
+    // PAROL TEKSHIRISH VA REAL STATISTIKANI OLISH
+    async function checkAuth() {
       const pass = document.getElementById('admin-pass').value;
-      if (pass === "1234") { // Kelajakda serverdagi o'z parolingiz bo'ladi
+      if (pass === "1234") { // Parolingiz (xohlasangiz o'zgartiring)
         document.getElementById('login-overlay').style.display = 'none';
+        await fetchRealStats();
       } else {
         alert("❌ Parol noto'g'ri!");
+      }
+    }
+
+    // SERVERDANIM REAL RAQAMLARNI OLISH
+    async function fetchRealStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        
+        document.getElementById('stat-users').innerText = data.users || 0;
+        document.getElementById('stat-conn').innerText = data.connections || 0;
+        document.getElementById('stat-msg').innerText = data.messages || 0;
+      } catch (err) {
+        console.log("Statistika yuklanmadi:", err);
       }
     }
 
@@ -176,7 +212,7 @@
       event.target.classList.add('active');
     }
 
-    // FAYL TANLANGANDA PREVYU KO'RSATISH
+    // PREVYU KO'RSATISH
     function handleFileSelect(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -196,13 +232,13 @@
       previewBox.style.display = 'block';
     }
 
-    // FAYLNI OLIB TASHLASH
+    // FAYLNI O'CHIRISH
     function removeFile() {
       document.getElementById('file-input').value = '';
       document.getElementById('preview-box').style.display = 'none';
     }
 
-    // POSTNI YUBORISH
+    // POST YUBORISH
     function sendPost() {
       const time = document.getElementById('schedule-date').value;
       if (time) {
