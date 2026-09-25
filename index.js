@@ -118,6 +118,30 @@ async function getOwnerId(connectionId) {
   return null;
 }
 
+// Xabar yuboruvchining ismini xavfsiz olish (username bo'lmasa ham ishlaydi)
+function getSenderName(msg) {
+  if (msg.from) {
+    const firstName = msg.from.first_name || '';
+    const lastName = msg.from.last_name || '';
+    const fullName = (firstName + ' ' + lastName).trim();
+    return fullName || 'Foydalanuvchi';
+  }
+  if (msg.chat) {
+    const firstName = msg.chat.first_name || '';
+    const lastName = msg.chat.last_name || '';
+    const fullName = (firstName + ' ' + lastName).trim();
+    return fullName || 'Suhbatdosh';
+  }
+  return 'Suhbatdosh';
+}
+
+// Xabar yuboruvchining ID sini xavfsiz olish
+function getSenderId(msg) {
+  if (msg.from && msg.from.id) return msg.from.id;
+  if (msg.chat && msg.chat.id) return msg.chat.id;
+  return null;
+}
+
 // Media ma'lumotlarini ajratib olish funksiyasi
 function extractMediaInfo(msg) {
   let fileId = null;
@@ -151,8 +175,8 @@ function extractMediaInfo(msg) {
 }
 
 // Mediani foydalanuvchiga qayta yuboruvchi yordamchi funksiya
-async function sendMediaReport(ownerId, reportText, mediaType, fileId, keyboard) {
-  const options = { parse_mode: 'HTML', reply_markup: keyboard };
+async function sendMediaReport(ownerId, reportText, mediaType, fileId) {
+  const options = { parse_mode: 'HTML' };
 
   if (!fileId || !mediaType) {
     await bot.api.sendMessage(ownerId, reportText, options);
@@ -179,11 +203,11 @@ async function sendMediaReport(ownerId, reportText, mediaType, fileId, keyboard)
       break;
     case 'video_note':
       await bot.api.sendMessage(ownerId, reportText, { parse_mode: 'HTML' });
-      await bot.api.sendVideoNote(ownerId, fileId, { reply_markup: keyboard });
+      await bot.api.sendVideoNote(ownerId, fileId);
       break;
     case 'sticker':
       await bot.api.sendMessage(ownerId, reportText, { parse_mode: 'HTML' });
-      await bot.api.sendSticker(ownerId, fileId, { reply_markup: keyboard });
+      await bot.api.sendSticker(ownerId, fileId);
       break;
     default:
       await bot.api.sendMessage(ownerId, reportText, options);
@@ -378,10 +402,8 @@ bot.on('business_message', async (ctx) => {
   const msg = ctx.businessMessage;
   const { fileId, mediaType, text } = extractMediaInfo(msg);
 
-  const senderId = (msg.from && msg.from.id) ? msg.from.id : msg.chat.id;
-  const senderName = msg.from 
-    ? (msg.from.first_name + (msg.from.last_name ? ' ' + msg.from.last_name : '')) 
-    : (msg.chat && msg.chat.first_name ? msg.chat.first_name : "Suhbatdosh");
+  const senderId = getSenderId(msg);
+  const senderName = getSenderName(msg);
 
   await getOwnerId(msg.business_connection_id);
 
@@ -397,27 +419,23 @@ bot.on('edited_business_message', async (ctx) => {
   const ownerId = await getOwnerId(msg.business_connection_id);
   if (!ownerId) return;
 
-  const senderId = (msg.from && msg.from.id) ? msg.from.id : msg.chat.id;
+  const senderId = getSenderId(msg);
   if (senderId === ownerId) return;
 
   const stmtSelect = db.prepare('SELECT text, media_type, file_id, sender_id, sender_name FROM messages WHERE message_id = ? AND chat_id = ?');
   const oldMsg = stmtSelect.get(msg.message_id, msg.chat.id);
   const { fileId: newFileId, mediaType: newMediaType, text: newText } = extractMediaInfo(msg);
   
-  const senderName = (msg.from && msg.from.first_name) 
-    ? msg.from.first_name 
-    : (oldMsg && oldMsg.sender_name ? oldMsg.sender_name : "Suhbatdoshingiz");
+  // Ism olish: avval hozirgi xabardan, keyin bazadan, oxirida umumiy nom
+  const senderName = getSenderName(msg) || (oldMsg && oldMsg.sender_name ? oldMsg.sender_name : 'Suhbatdosh');
 
   if (oldMsg && (oldMsg.text !== newText || oldMsg.file_id !== newFileId)) {
     let report = `✏️ <b>${escapeHtml(senderName)}</b> xabarni tahrirladi:\n\n`;
     if (oldMsg.text) report += `⏳ <b>Eski matn:</b> <s>${escapeHtml(oldMsg.text)}</s>\n`;
     if (newText) report += `🔄 <b>Yangi matn:</b> <b>${escapeHtml(newText)}</b>`;
 
-    const targetUserId = senderId || (oldMsg ? oldMsg.sender_id : msg.chat.id);
-    const keyboard = targetUserId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
-
     try {
-      await sendMediaReport(ownerId, report, oldMsg.media_type, oldMsg.file_id, keyboard);
+      await sendMediaReport(ownerId, report, oldMsg.media_type, oldMsg.file_id);
     } catch (err) {
       console.log("[XATO] Edit xabarini yuborishda:", err.message);
     }
@@ -439,18 +457,18 @@ bot.on('deleted_business_messages', async (ctx) => {
     if (deletedMsg) {
       if (deletedMsg.sender_id && deletedMsg.sender_id === ownerId) continue;
 
-      let report = `🗑 <b>${escapeHtml(deletedMsg.sender_name)}</b> xabarni o'chirdi:\n\n`;
+      // Ism bo'lmasa ham ishlaydi — umumiy nom qo'yiladi
+      const name = deletedMsg.sender_name || 'Suhbatdosh';
+
+      let report = `🗑 <b>${escapeHtml(name)}</b> xabarni o'chirdi:\n\n`;
       if (deletedMsg.text) {
         report += `📝 <b>O'chirilgan xabar matni:</b>\n<b>${escapeHtml(deletedMsg.text)}</b>`;
       } else if (deletedMsg.media_type) {
         report += `📁 <b>O'chirilgan media fayl (${deletedMsg.media_type})</b>`;
       }
 
-      const targetUserId = deletedMsg.sender_id || deletion.chat.id;
-      const keyboard = targetUserId ? new InlineKeyboard().url("👤 Profilni ko'rish", `tg://user?id=${targetUserId}`) : undefined;
-
       try {
-        await sendMediaReport(ownerId, report, deletedMsg.media_type, deletedMsg.file_id, keyboard);
+        await sendMediaReport(ownerId, report, deletedMsg.media_type, deletedMsg.file_id);
       } catch (err) {
         console.log("[XATO] Delete xabarini yuborishda:", err.message);
       }
